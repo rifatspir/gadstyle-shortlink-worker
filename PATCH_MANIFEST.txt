@@ -1,19 +1,21 @@
-Patch: Phase 3
-Base Build: gadstyle-shortlink-worker-phase2.zip
-Applied Directly On Top Of Previous Build: Yes
 
-Modified Files:
+Phase: 4
+Base: gadstyle-shortlink-worker-phase3.zip
+Applied directly on top of exact previous build: YES
+
+Modified files:
 - src/index.ts
 - README.md
-- PATCH_MANIFEST.txt
 
-Added Files:
+Added files:
 - none
 
-Deleted Files:
+Deleted files:
 - none
 
-Summary:
-- Added GET /api/shortlinks/resolve-direct for ID-based direct route lookups from Vercel staging.
-- Kept existing /health, /api/test, /api/shortlinks, and /api/shortlinks/resolve endpoints.
-- No live Vercel production traffic is switched by this worker patch itself.
+Notes:
+- Added GET /api/admin/stats
+- Added GET /api/admin/links
+- Added GET /api/admin/recent-clicks
+- Public shortlink create/resolve routes unchanged
+- Admin analytics remain lightweight in this phase and may report 0 until analytics migration is added later

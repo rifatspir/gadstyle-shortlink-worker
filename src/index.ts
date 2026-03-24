@@ -1,3 +1,4 @@
+
 export interface Env {
   DB: D1Database;
 }
@@ -16,6 +17,15 @@ type ShortlinkRow = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type RecentClickRow = {
+  id: string;
+  route_type: string;
+  created_at: string;
+  code: string;
+  entity_type: EntityType;
+  entity_id: string;
 };
 
 const SERVICE_NAME = 'gadstyle-shortlink-worker';
@@ -90,6 +100,19 @@ function serializeShortlink(row: ShortlinkRow) {
   };
 }
 
+function toAdminLink(row: ShortlinkRow) {
+  return {
+    id: row.id,
+    code: row.code,
+    targetType: row.entity_type,
+    targetId: row.entity_id ?? '',
+    clickCount: 0,
+    isActive: row.is_active === 1,
+    updatedAt: row.updated_at,
+    canonicalUrl: row.web_url,
+  };
+}
+
 async function getTables(env: Env) {
   const result = await env.DB
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
@@ -133,7 +156,6 @@ async function findActiveByCode(env: Env, code: string) {
     .bind(normalized)
     .first<ShortlinkRow>();
 }
-
 
 async function findActiveByEntity(env: Env, entityType: EntityType, entityId: string) {
   return env.DB
@@ -191,7 +213,7 @@ async function handleHealth(env: Env) {
   const probe = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
   return json({
     ok: true,
-    phase: 3,
+    phase: 4,
     service: SERVICE_NAME,
     d1_connected: probe?.ok === 1,
     database_binding: 'DB',
@@ -200,13 +222,10 @@ async function handleHealth(env: Env) {
 
 async function handleTest(env: Env) {
   const tables = await getTables(env);
-  const shortlinkCount = await env.DB
-    .prepare('SELECT COUNT(*) AS count FROM shortlinks')
-    .first<{ count: number }>();
-
+  const shortlinkCount = await env.DB.prepare('SELECT COUNT(*) AS count FROM shortlinks').first<{ count: number }>();
   return json({
     ok: true,
-    phase: 3,
+    phase: 4,
     service: SERVICE_NAME,
     tables,
     shortlinks_count: shortlinkCount?.count ?? 0,
@@ -216,69 +235,34 @@ async function handleTest(env: Env) {
 async function handleResolve(url: URL, env: Env) {
   const code = normalizeText(url.searchParams.get('code'), 120);
   if (!code) {
-    return json({
-      ok: false,
-      error: 'Missing required query parameter: code',
-    }, 400);
+    return json({ ok: false, error: 'Missing required query parameter: code' }, 400);
   }
 
   const row = await findActiveByCode(env, code);
   if (!row) {
-    return json({
-      ok: false,
-      error: 'Shortlink not found',
-      code: normalizeCode(code),
-    }, 404);
+    return json({ ok: false, error: 'Shortlink not found', code: normalizeCode(code) }, 404);
   }
 
-  return json({
-    ok: true,
-    phase: 3,
-    service: SERVICE_NAME,
-    shortlink: serializeShortlink(row),
-  });
+  return json({ ok: true, phase: 4, service: SERVICE_NAME, shortlink: serializeShortlink(row) });
 }
-
 
 async function handleResolveDirect(url: URL, env: Env) {
   const entityType = normalizeEntityType(url.searchParams.get('entity_type'));
   const entityId = normalizeEntityId(url.searchParams.get('entity_id'));
 
-  if (!entityType) {
-    return json({
-      ok: false,
-      error: 'Missing or invalid required query parameter: entity_type',
-    }, 400);
-  }
-
-  if (!entityId) {
-    return json({
-      ok: false,
-      error: 'Missing or invalid required query parameter: entity_id',
-    }, 400);
-  }
+  if (!entityType) return json({ ok: false, error: 'Missing or invalid required query parameter: entity_type' }, 400);
+  if (!entityId) return json({ ok: false, error: 'Missing or invalid required query parameter: entity_id' }, 400);
 
   const row = await findActiveByEntity(env, entityType, entityId);
   if (!row) {
-    return json({
-      ok: false,
-      error: 'Shortlink not found',
-      entity_type: entityType,
-      entity_id: entityId,
-    }, 404);
+    return json({ ok: false, error: 'Shortlink not found', entity_type: entityType, entity_id: entityId }, 404);
   }
 
-  return json({
-    ok: true,
-    phase: 3,
-    service: SERVICE_NAME,
-    shortlink: serializeShortlink(row),
-  });
+  return json({ ok: true, phase: 4, service: SERVICE_NAME, shortlink: serializeShortlink(row) });
 }
 
 async function handleCreate(request: Request, env: Env) {
   let body: Record<string, unknown>;
-
   try {
     body = await request.json<Record<string, unknown>>();
   } catch {
@@ -292,26 +276,12 @@ async function handleCreate(request: Request, env: Env) {
   const source = normalizeText(body.source, 120) ?? 'worker-api';
   const notes = normalizeText(body.notes, 2000);
 
-  if (!entityType) {
-    return json({
-      ok: false,
-      error: 'entity_type must be one of: product, category, brand',
-    }, 400);
-  }
-
-  if (!entityId) {
-    return json({
-      ok: false,
-      error: 'entity_id must be a numeric string or number',
-    }, 400);
-  }
+  if (!entityType) return json({ ok: false, error: 'entity_type must be one of: product, category, brand' }, 400);
+  if (!entityId) return json({ ok: false, error: 'entity_id must be a numeric string or number' }, 400);
 
   const appPath = buildAppPath(entityType, entityId);
   const desiredCode = requestedCodeRaw ? normalizeCode(requestedCodeRaw) : buildFallbackCode(entityType, entityId);
-
-  if (!desiredCode) {
-    return json({ ok: false, error: 'Unable to determine a valid short code' }, 400);
-  }
+  if (!desiredCode) return json({ ok: false, error: 'Unable to determine a valid short code' }, 400);
 
   const uniqueCode = await reserveUniqueCode(env, desiredCode);
   const created = await insertShortlink(env, {
@@ -324,13 +294,56 @@ async function handleCreate(request: Request, env: Env) {
     notes,
   });
 
+  return json({ ok: true, phase: 4, service: SERVICE_NAME, created: true, shortlink: serializeShortlink(created) }, 201);
+}
+
+async function handleAdminStats(env: Env) {
+  const totalLinksRow = await env.DB.prepare('SELECT COUNT(*) AS count FROM shortlinks').first<{ count: number }>();
   return json({
     ok: true,
-    phase: 3,
+    phase: 4,
     service: SERVICE_NAME,
-    created: true,
-    shortlink: serializeShortlink(created),
-  }, 201);
+    stats: {
+      totalLinks: totalLinksRow?.count ?? 0,
+      totalClicks: 0,
+      recentClicks: 0,
+    },
+  });
+}
+
+async function handleAdminLinks(url: URL, env: Env) {
+  const search = normalizeText(url.searchParams.get('q'), 120);
+  const sql = search
+    ? `SELECT id, code, entity_type, entity_id, app_path, web_url, is_active, source, notes, created_at, updated_at
+       FROM shortlinks
+       WHERE code LIKE ? OR web_url LIKE ? OR entity_id LIKE ?
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 25`
+    : `SELECT id, code, entity_type, entity_id, app_path, web_url, is_active, source, notes, created_at, updated_at
+       FROM shortlinks
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 25`;
+
+  const statement = env.DB.prepare(sql);
+  const result = search
+    ? await statement.bind(`%${search}%`, `%${search}%`, `%${search}%`).all<ShortlinkRow>()
+    : await statement.all<ShortlinkRow>();
+
+  return json({
+    ok: true,
+    phase: 4,
+    service: SERVICE_NAME,
+    links: result.results.map(toAdminLink),
+  });
+}
+
+async function handleRecentClicks(_env: Env) {
+  return json({
+    ok: true,
+    phase: 4,
+    service: SERVICE_NAME,
+    clicks: [] as RecentClickRow[],
+  });
 }
 
 export default {
@@ -338,36 +351,29 @@ export default {
     const url = new URL(request.url);
 
     try {
-      if (request.method === 'GET' && url.pathname === '/health') {
-        return await handleHealth(env);
-      }
+      if (request.method === 'GET' && url.pathname === '/health') return await handleHealth(env);
+      if (request.method === 'GET' && url.pathname === '/api/test') return await handleTest(env);
+      if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve') return await handleResolve(url, env);
+      if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve-direct') return await handleResolveDirect(url, env);
+      if (request.method === 'POST' && url.pathname === '/api/shortlinks') return await handleCreate(request, env);
+      if (request.method === 'GET' && url.pathname === '/api/admin/stats') return await handleAdminStats(env);
+      if (request.method === 'GET' && url.pathname === '/api/admin/links') return await handleAdminLinks(url, env);
+      if (request.method === 'GET' && url.pathname === '/api/admin/recent-clicks') return await handleRecentClicks(env);
 
-      if (request.method === 'GET' && url.pathname === '/api/test') {
-        return await handleTest(env);
-      }
-
-      if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve') {
-        return await handleResolve(url, env);
-      }
-
-      if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve-direct') {
-        return await handleResolveDirect(url, env);
-      }
-
-      if (request.method === 'POST' && url.pathname === '/api/shortlinks') {
-        return await handleCreate(request, env);
-      }
-
-      if (url.pathname === '/api/shortlinks' || url.pathname === '/api/shortlinks/resolve' || url.pathname === '/api/shortlinks/resolve-direct') {
+      if (
+        url.pathname === '/api/shortlinks' ||
+        url.pathname === '/api/shortlinks/resolve' ||
+        url.pathname === '/api/shortlinks/resolve-direct' ||
+        url.pathname === '/api/admin/stats' ||
+        url.pathname === '/api/admin/links' ||
+        url.pathname === '/api/admin/recent-clicks'
+      ) {
         return json({ ok: false, error: 'Method not allowed' }, 405);
       }
 
       return json({ ok: false, error: 'Not found' }, 404);
     } catch (error) {
-      return json({
-        ok: false,
-        error: error instanceof Error ? error.message : 'Unknown worker error',
-      }, 500);
+      return json({ ok: false, error: error instanceof Error ? error.message : 'Unknown worker error' }, 500);
     }
   },
 };

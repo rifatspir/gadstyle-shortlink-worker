@@ -39,3 +39,9 @@ This Worker is deployed separately from the live Vercel shortlink frontend.
 
 ## Phase 3
 - Added `GET /api/shortlinks/resolve-direct?entity_type=product|category|brand&entity_id=123` for staging Vercel direct-route resolution.
+
+
+## Phase 4
+- Added admin stats/list/recent-clicks endpoints for staging Vercel admin.
+- Public resolve and create endpoints remain unchanged.
+- Click analytics remain lightweight in this phase and may report 0.
