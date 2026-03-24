@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gadstyle-shortlink-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-24",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gadstyle-shortlinks-d1",
+      "database_id": "7e457970-b19b-4044-811c-68be291a7cd3"
+    }
+  ]
+}
