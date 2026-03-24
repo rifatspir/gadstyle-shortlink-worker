@@ -1,10 +1,9 @@
-PATCH: Phase 2
-BASELINE: gadstyle-shortlink-worker-phase5-repacked.zip
+PATCH: Phase 5
+BASELINE: gadstyle-shortlink-worker-phase4.zip
 APPLIED_DIRECTLY_ON_TOP_OF_PREVIOUS_STABLE: YES
 
 MODIFIED FILES:
-- package.json
-- src/index.ts
+- README.md
 - PATCH_MANIFEST.txt
 
 ADDED FILES:
@@ -14,13 +13,5 @@ DELETED FILES:
 - none
 
 SUMMARY:
-- Added real aggregate click counting on shortlinks.
-- Added lightweight recent-click logging with capped retention.
-- Added real admin stats, paginated admin links, and recent-click feed endpoints.
-- Added automatic schema safety for click_count and recent_clicks table creation.
-- Public route contract remains unchanged and routing stays ID-based.
-
-
-Phase 2 root-fix2 packaging/build compatibility:
-- Removed package-lock.json to avoid Cloudflare npm clean-install bug/stall during dependency installation.
-- No runtime or routing logic changes.
+- Worker code unchanged from the stable Phase 4 deployment.
+- Repacked only for Phase 5 so frontend production cutover can reference the exact stable Worker baseline.
