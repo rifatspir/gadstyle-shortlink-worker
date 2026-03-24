@@ -134,6 +134,20 @@ async function findActiveByCode(env: Env, code: string) {
     .first<ShortlinkRow>();
 }
 
+
+async function findActiveByEntity(env: Env, entityType: EntityType, entityId: string) {
+  return env.DB
+    .prepare(
+      `SELECT id, code, entity_type, entity_id, app_path, web_url, is_active, source, notes, created_at, updated_at
+       FROM shortlinks
+       WHERE entity_type = ? AND entity_id = ? AND is_active = 1
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .bind(entityType, entityId)
+    .first<ShortlinkRow>();
+}
+
 async function insertShortlink(env: Env, row: {
   code: string;
   entityType: EntityType;
@@ -177,7 +191,7 @@ async function handleHealth(env: Env) {
   const probe = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
   return json({
     ok: true,
-    phase: 2,
+    phase: 3,
     service: SERVICE_NAME,
     d1_connected: probe?.ok === 1,
     database_binding: 'DB',
@@ -192,7 +206,7 @@ async function handleTest(env: Env) {
 
   return json({
     ok: true,
-    phase: 2,
+    phase: 3,
     service: SERVICE_NAME,
     tables,
     shortlinks_count: shortlinkCount?.count ?? 0,
@@ -219,7 +233,44 @@ async function handleResolve(url: URL, env: Env) {
 
   return json({
     ok: true,
-    phase: 2,
+    phase: 3,
+    service: SERVICE_NAME,
+    shortlink: serializeShortlink(row),
+  });
+}
+
+
+async function handleResolveDirect(url: URL, env: Env) {
+  const entityType = normalizeEntityType(url.searchParams.get('entity_type'));
+  const entityId = normalizeEntityId(url.searchParams.get('entity_id'));
+
+  if (!entityType) {
+    return json({
+      ok: false,
+      error: 'Missing or invalid required query parameter: entity_type',
+    }, 400);
+  }
+
+  if (!entityId) {
+    return json({
+      ok: false,
+      error: 'Missing or invalid required query parameter: entity_id',
+    }, 400);
+  }
+
+  const row = await findActiveByEntity(env, entityType, entityId);
+  if (!row) {
+    return json({
+      ok: false,
+      error: 'Shortlink not found',
+      entity_type: entityType,
+      entity_id: entityId,
+    }, 404);
+  }
+
+  return json({
+    ok: true,
+    phase: 3,
     service: SERVICE_NAME,
     shortlink: serializeShortlink(row),
   });
@@ -275,7 +326,7 @@ async function handleCreate(request: Request, env: Env) {
 
   return json({
     ok: true,
-    phase: 2,
+    phase: 3,
     service: SERVICE_NAME,
     created: true,
     shortlink: serializeShortlink(created),
@@ -299,11 +350,15 @@ export default {
         return await handleResolve(url, env);
       }
 
+      if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve-direct') {
+        return await handleResolveDirect(url, env);
+      }
+
       if (request.method === 'POST' && url.pathname === '/api/shortlinks') {
         return await handleCreate(request, env);
       }
 
-      if (url.pathname === '/api/shortlinks' || url.pathname === '/api/shortlinks/resolve') {
+      if (url.pathname === '/api/shortlinks' || url.pathname === '/api/shortlinks/resolve' || url.pathname === '/api/shortlinks/resolve-direct') {
         return json({ ok: false, error: 'Method not allowed' }, 405);
       }
 

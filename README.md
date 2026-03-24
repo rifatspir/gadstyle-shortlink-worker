@@ -35,3 +35,7 @@ Cloudflare Worker + D1 backend for Gadstyle shortlink resolution.
 ## Deployment
 
 This Worker is deployed separately from the live Vercel shortlink frontend.
+
+
+## Phase 3
+- Added `GET /api/shortlinks/resolve-direct?entity_type=product|category|brand&entity_id=123` for staging Vercel direct-route resolution.

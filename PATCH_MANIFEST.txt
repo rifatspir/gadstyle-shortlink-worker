@@ -1,16 +1,6 @@
-Build: gadstyle-shortlink-worker-phase2.zip
-Base build: gadstyle-shortlink-worker-phase1-github-ready-fix1.zip
-Applied directly on top of exact previous build: YES
-
-Phase: 2
-
-Summary:
-- Added real Worker API endpoint GET /api/shortlinks/resolve
-- Added real Worker API endpoint POST /api/shortlinks
-- Added input validation for entity_type, entity_id, and code normalization
-- Added canonical app_path generation for product/category/brand
-- Kept no-store cache headers on API responses
-- Left health and api/test endpoints intact, phase bumped to 2
+Patch: Phase 3
+Base Build: gadstyle-shortlink-worker-phase2.zip
+Applied Directly On Top Of Previous Build: Yes
 
 Modified Files:
 - src/index.ts
@@ -22,3 +12,8 @@ Added Files:
 
 Deleted Files:
 - none
+
+Summary:
+- Added GET /api/shortlinks/resolve-direct for ID-based direct route lookups from Vercel staging.
+- Kept existing /health, /api/test, /api/shortlinks, and /api/shortlinks/resolve endpoints.
+- No live Vercel production traffic is switched by this worker patch itself.
