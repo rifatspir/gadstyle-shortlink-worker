@@ -1,47 +1,17 @@
 # Gadstyle Shortlink Worker
 
-Cloudflare Worker + D1 backend for Gadstyle shortlink resolution.
+Stable Worker baseline for Phase 5 production cutover.
 
-## Phase 2 endpoints
+## Status
+- Code unchanged from stable Phase 4
+- Used by the live Vercel frontend through `SHORTLINK_API_BASE_URL`
 
+## Stable endpoints
 - `GET /health`
 - `GET /api/test`
 - `GET /api/shortlinks/resolve?code=...`
+- `GET /api/shortlinks/resolve-direct?entity_type=product|category|brand&entity_id=...`
 - `POST /api/shortlinks`
-
-## POST body
-
-```json
-{
-  "entity_type": "product",
-  "entity_id": 174776,
-  "code": "my-custom-code",
-  "web_url": "https://www.gadstyle.com/item/174776/spaceship-clock-projection-lamp-convenient-for-travel-atmosphere-night-light/",
-  "source": "phase2-test",
-  "notes": "optional note"
-}
-```
-
-## Behavior
-
-- canonical app paths are always generated from entity type + ID
-- product -> `/p/{id}`
-- category -> `/c/{id}`
-- brand -> `/b/{id}`
-- no slug-based routing dependency
-- resolve endpoint returns only active shortlinks
-- API responses use `Cache-Control: no-store`
-
-## Deployment
-
-This Worker is deployed separately from the live Vercel shortlink frontend.
-
-
-## Phase 3
-- Added `GET /api/shortlinks/resolve-direct?entity_type=product|category|brand&entity_id=123` for staging Vercel direct-route resolution.
-
-
-## Phase 4
-- Added admin stats/list/recent-clicks endpoints for staging Vercel admin.
-- Public resolve and create endpoints remain unchanged.
-- Click analytics remain lightweight in this phase and may report 0.
+- `GET /api/admin/stats`
+- `GET /api/admin/links`
+- `GET /api/admin/recent-clicks`
