@@ -1,23 +1,24 @@
-PATCH_MANIFEST.txt
+Build: gadstyle-shortlink-worker-phase2.zip
+Base build: gadstyle-shortlink-worker-phase1-github-ready-fix1.zip
+Applied directly on top of exact previous build: YES
 
-Build: phase1-github-ready-fix1
-Base: gadstyle-shortlink-worker-phase1-github-ready.zip
-Applied directly on top of exact previous worker Phase 1 GitHub-ready build: YES
+Phase: 2
 
-Purpose:
-- Fix Cloudflare GitHub deploy failure caused by unavailable @cloudflare/workers-types version.
-- Keep Worker logic and D1 binding unchanged.
+Summary:
+- Added real Worker API endpoint GET /api/shortlinks/resolve
+- Added real Worker API endpoint POST /api/shortlinks
+- Added input validation for entity_type, entity_id, and code normalization
+- Added canonical app_path generation for product/category/brand
+- Kept no-store cache headers on API responses
+- Left health and api/test endpoints intact, phase bumped to 2
 
 Modified Files:
-- package.json
+- src/index.ts
+- README.md
+- PATCH_MANIFEST.txt
 
 Added Files:
 - none
 
 Deleted Files:
 - none
-
-Notes:
-- Removed @cloudflare/workers-types from devDependencies because the pinned version failed during Cloudflare install.
-- Live Vercel/Neon shortlink service remains untouched.
-- Worker endpoints remain /health and /api/test.

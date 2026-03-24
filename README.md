@@ -1,35 +1,37 @@
-# Gadstyle Shortlink Worker — Phase 1
+# Gadstyle Shortlink Worker
 
-This is the separate Cloudflare Worker foundation for the D1 migration.
+Cloudflare Worker + D1 backend for Gadstyle shortlink resolution.
 
-## Important
-- This does not replace the live Vercel shortlink service yet.
-- This does not change the public routes yet.
-- This is a separate rollback-safe foundation project.
+## Phase 2 endpoints
 
-## Current D1 database already configured
-- database_name: gadstyle-shortlinks-d1
-- database_id: 7e457970-b19b-4044-811c-68be291a7cd3
-- binding: DB
+- `GET /health`
+- `GET /api/test`
+- `GET /api/shortlinks/resolve?code=...`
+- `POST /api/shortlinks`
 
-## Endpoints
-- GET /health
-- GET /api/test
+## POST body
 
-## Expected results
-### /health
-Should return JSON with:
-- ok: true
-- phase: 1
-- d1_connected: true
+```json
+{
+  "entity_type": "product",
+  "entity_id": 174776,
+  "code": "my-custom-code",
+  "web_url": "https://www.gadstyle.com/item/174776/spaceship-clock-projection-lamp-convenient-for-travel-atmosphere-night-light/",
+  "source": "phase2-test",
+  "notes": "optional note"
+}
+```
 
-### /api/test
-Should return JSON with:
-- ok: true
-- phase: 1
-- tables including shortlinks
-- shortlinks_count >= 4
+## Behavior
 
+- canonical app paths are always generated from entity type + ID
+- product -> `/p/{id}`
+- category -> `/c/{id}`
+- brand -> `/b/{id}`
+- no slug-based routing dependency
+- resolve endpoint returns only active shortlinks
+- API responses use `Cache-Control: no-store`
 
-## Build fix
-This package removes the unavailable @cloudflare/workers-types dependency that caused Cloudflare GitHub install failure.
+## Deployment
+
+This Worker is deployed separately from the live Vercel shortlink frontend.
