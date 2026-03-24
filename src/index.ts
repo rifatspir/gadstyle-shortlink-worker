@@ -141,8 +141,8 @@ function toAdminRecentClick(row: RecentClickRow) {
 }
 
 async function ensurePhase5Schema(env: Env) {
-  await env.DB.exec(`
-    CREATE TABLE IF NOT EXISTS shortlinks (
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS shortlinks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,
       entity_type TEXT NOT NULL CHECK (entity_type IN ('product', 'category', 'brand', 'shortcode')),
@@ -154,11 +154,11 @@ async function ensurePhase5Schema(env: Env) {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_shortlinks_code ON shortlinks(code);
-    CREATE INDEX IF NOT EXISTS idx_shortlinks_entity_type_id ON shortlinks(entity_type, entity_id);
-    CREATE INDEX IF NOT EXISTS idx_shortlinks_active ON shortlinks(is_active);
-    CREATE TABLE IF NOT EXISTS recent_clicks (
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_shortlinks_code ON shortlinks(code)`,
+    `CREATE INDEX IF NOT EXISTS idx_shortlinks_entity_type_id ON shortlinks(entity_type, entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_shortlinks_active ON shortlinks(is_active)`,
+    `CREATE TABLE IF NOT EXISTS recent_clicks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       shortlink_id INTEGER NOT NULL,
       code TEXT NOT NULL,
@@ -167,13 +167,17 @@ async function ensurePhase5Schema(env: Env) {
       route_type TEXT NOT NULL CHECK (route_type IN ('short_code', 'direct_product', 'direct_category', 'direct_brand')),
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       FOREIGN KEY (shortlink_id) REFERENCES shortlinks(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_recent_clicks_created_at ON recent_clicks(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_recent_clicks_shortlink_id ON recent_clicks(shortlink_id);
-  `);
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_recent_clicks_created_at ON recent_clicks(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_recent_clicks_shortlink_id ON recent_clicks(shortlink_id)`,
+  ];
+
+  for (const statement of statements) {
+    await env.DB.prepare(statement).run();
+  }
 
   try {
-    await env.DB.exec(`ALTER TABLE shortlinks ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0;`);
+    await env.DB.prepare(`ALTER TABLE shortlinks ADD COLUMN click_count INTEGER NOT NULL DEFAULT 0`).run();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!message.toLowerCase().includes('duplicate column name')) throw error;

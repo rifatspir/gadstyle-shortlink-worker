@@ -19,3 +19,10 @@ SUMMARY:
 - Added real admin stats, paginated admin links, and recent-click feed endpoints.
 - Added automatic schema safety for click_count and recent_clicks table creation.
 - Public route contract remains unchanged and routing stays ID-based.
+
+
+Phase 2 root-fix2 packaging/build compatibility:
+- Removed package-lock.json to avoid Cloudflare npm clean-install bug/stall during dependency installation.
+- No runtime or routing logic changes.
+
+Additional fix: D1 schema creation now runs one statement at a time to avoid Cloudflare D1 multi-statement CREATE parsing errors.
