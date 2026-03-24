@@ -1,0 +1,38 @@
+Build: gadstyle-shortlink-worker-phase1-github-ready
+Phase: 1
+Base: separate additive foundation project beside current live stable build; not applied on top of or replacing live Vercel shortlink service in this phase.
+
+Summary:
+- Added GitHub-ready Cloudflare Worker project for D1 migration foundation.
+- Bound Worker config to existing D1 database gadstyle-shortlinks-d1.
+- Added test endpoints: /health and /api/test.
+- D1 schema file included for reference and parity with dashboard setup already completed.
+- No live Vercel route switch in this phase.
+- No Neon removal in this phase.
+
+Modified Files:
+- none
+
+Added Files:
+- src/index.ts
+- sql/phase1_d1_schema.sql
+- package.json
+- tsconfig.json
+- wrangler.jsonc
+- README.md
+- PATCH_MANIFEST.txt
+
+Deleted Files:
+- none
+
+How to test:
+1. Upload this package to a new GitHub repo named gadstyle-shortlink-worker.
+2. In Cloudflare Workers, choose Import a repository and select that repo.
+3. Confirm the Worker name is gadstyle-shortlink-worker.
+4. Let Cloudflare deploy.
+5. Open /health on the Worker URL.
+6. Open /api/test on the Worker URL.
+
+Expected:
+- /health returns ok:true and d1_connected:true.
+- /api/test returns ok:true, includes shortlinks table, and shortlinks_count >= 4.
