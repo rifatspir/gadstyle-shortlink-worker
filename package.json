@@ -1,13 +1,12 @@
 {
   "name": "gadstyle-shortlink-worker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260320.0",
     "typescript": "^5.9.2",
     "wrangler": "^4.37.1"
   }

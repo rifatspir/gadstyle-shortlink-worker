@@ -29,3 +29,7 @@ Should return JSON with:
 - phase: 1
 - tables including shortlinks
 - shortlinks_count >= 4
+
+
+## Build fix
+This package removes the unavailable @cloudflare/workers-types dependency that caused Cloudflare GitHub install failure.
