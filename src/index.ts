@@ -1,9 +1,12 @@
 export interface Env {
   DB: D1Database;
+  SMART_DOWNLOAD_LOG_SECRET?: string;
 }
 
 type EntityType = 'product' | 'category' | 'brand';
 type RouteType = 'short_code' | 'direct_product' | 'direct_category' | 'direct_brand';
+type SmartDownloadDestination = 'play_store' | 'app_store' | 'fallback';
+type SmartDownloadDevice = 'android' | 'ios' | 'desktop' | 'unknown' | 'bot';
 
 type ShortlinkRow = {
   id: number;
@@ -29,6 +32,18 @@ type RecentClickRow = {
   entity_id: string;
 };
 
+type SmartDownloadStatsRow = {
+  total_requests: number;
+  android_redirects: number;
+  ios_redirects: number;
+  fallback_views: number;
+};
+
+type SmartDownloadSourceRow = {
+  source: string;
+  count: number;
+};
+
 const SERVICE_NAME = 'gadstyle-shortlink-worker';
 const PHASE = 5;
 const DEFAULT_LINKS_PAGE_SIZE = 20;
@@ -36,6 +51,8 @@ const MAX_LINKS_PAGE_SIZE = 100;
 const DEFAULT_RECENT_CLICKS_LIMIT = 20;
 const MAX_RECENT_CLICKS_LIMIT = 100;
 const MAX_RECENT_CLICK_ROWS = 5000;
+const MAX_SMART_DOWNLOAD_EVENT_ROWS = 10000;
+const MAX_SMART_DOWNLOAD_SOURCES = 8;
 const NO_STORE_HEADERS: Record<string, string> = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
@@ -70,6 +87,28 @@ function normalizeText(value: unknown, maxLength = 500) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, maxLength);
+}
+
+function normalizeSmartDownloadDestination(value: unknown): SmartDownloadDestination | null {
+  if (value === 'play_store' || value === 'app_store' || value === 'fallback') return value;
+  return null;
+}
+
+function normalizeSmartDownloadDevice(value: unknown): SmartDownloadDevice {
+  if (value === 'android' || value === 'ios' || value === 'desktop' || value === 'unknown' || value === 'bot') return value;
+  return 'unknown';
+}
+
+function normalizeSmartDownloadSource(value: unknown) {
+  const normalized = normalizeText(value, 120);
+  if (!normalized) return 'direct';
+  return normalized
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('/')[0]
+    .replace(/[^a-z0-9._:-]/g, '')
+    .slice(0, 120) || 'direct';
 }
 
 function normalizeEntityId(value: unknown): string | null {
@@ -170,6 +209,16 @@ async function ensurePhase5Schema(env: Env) {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_recent_clicks_created_at ON recent_clicks(created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_recent_clicks_shortlink_id ON recent_clicks(shortlink_id)`,
+    `CREATE TABLE IF NOT EXISTS smart_download_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      destination TEXT NOT NULL CHECK (destination IN ('play_store', 'app_store', 'fallback')),
+      device_type TEXT NOT NULL CHECK (device_type IN ('android', 'ios', 'desktop', 'unknown', 'bot')),
+      source TEXT NOT NULL DEFAULT 'direct',
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_smart_download_events_created_at ON smart_download_events(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_smart_download_events_destination ON smart_download_events(destination)`,
+    `CREATE INDEX IF NOT EXISTS idx_smart_download_events_source ON smart_download_events(source)`,
   ];
 
   for (const statement of statements) {
@@ -413,10 +462,25 @@ async function handleCreate(request: Request, env: Env) {
 
 async function handleAdminStats(env: Env) {
   await ensurePhase5Schema(env);
-  const [totalLinksRow, totalClicksRow, recentClicksRow] = await Promise.all([
+  const [totalLinksRow, totalClicksRow, recentClicksRow, smartDownloadRow, smartDownloadSources] = await Promise.all([
     env.DB.prepare('SELECT COUNT(*) AS count FROM shortlinks').first<{ count: number }>(),
     env.DB.prepare('SELECT COALESCE(SUM(click_count), 0) AS count FROM shortlinks').first<{ count: number }>(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM recent_clicks WHERE created_at >= datetime('now', '-14 days')").first<{ count: number }>(),
+    env.DB.prepare(
+      `SELECT
+        COUNT(*) AS total_requests,
+        SUM(CASE WHEN destination = 'play_store' THEN 1 ELSE 0 END) AS android_redirects,
+        SUM(CASE WHEN destination = 'app_store' THEN 1 ELSE 0 END) AS ios_redirects,
+        SUM(CASE WHEN destination = 'fallback' THEN 1 ELSE 0 END) AS fallback_views
+       FROM smart_download_events`,
+    ).first<SmartDownloadStatsRow>(),
+    env.DB.prepare(
+      `SELECT source, COUNT(*) AS count
+       FROM smart_download_events
+       GROUP BY source
+       ORDER BY count DESC, source ASC
+       LIMIT ?`,
+    ).bind(MAX_SMART_DOWNLOAD_SOURCES).all<SmartDownloadSourceRow>(),
   ]);
 
   return json({
@@ -427,6 +491,16 @@ async function handleAdminStats(env: Env) {
       totalLinks: totalLinksRow?.count ?? 0,
       totalClicks: totalClicksRow?.count ?? 0,
       recentClicks: recentClicksRow?.count ?? 0,
+      smartDownloads: {
+        totalRequests: smartDownloadRow?.total_requests ?? 0,
+        androidRedirects: smartDownloadRow?.android_redirects ?? 0,
+        iosRedirects: smartDownloadRow?.ios_redirects ?? 0,
+        fallbackViews: smartDownloadRow?.fallback_views ?? 0,
+        sources: smartDownloadSources.results.map((row) => ({
+          source: row.source,
+          count: row.count,
+        })),
+      },
     },
   });
 }
@@ -492,6 +566,44 @@ async function handleRecentClicks(url: URL, env: Env) {
   });
 }
 
+
+async function handleSmartDownloadEvent(request: Request, env: Env) {
+  await ensurePhase5Schema(env);
+
+  const configuredSecret = normalizeText(env.SMART_DOWNLOAD_LOG_SECRET, 256);
+  if (configuredSecret && request.headers.get('x-smart-download-secret') !== configuredSecret) {
+    return json({ ok: false, error: 'Unauthorized' }, 401);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json<Record<string, unknown>>();
+  } catch {
+    return json({ ok: false, error: 'Invalid JSON body' }, 400);
+  }
+
+  const destination = normalizeSmartDownloadDestination(body.destination);
+  if (!destination) return json({ ok: false, error: 'Invalid destination' }, 400);
+
+  const deviceType = normalizeSmartDownloadDevice(body.device_type);
+  const source = normalizeSmartDownloadSource(body.source);
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO smart_download_events (destination, device_type, source)
+       VALUES (?, ?, ?)`,
+    ).bind(destination, deviceType, source),
+    env.DB.prepare(
+      `DELETE FROM smart_download_events
+       WHERE id NOT IN (
+         SELECT id FROM smart_download_events ORDER BY id DESC LIMIT ?
+       )`,
+    ).bind(MAX_SMART_DOWNLOAD_EVENT_ROWS),
+  ]);
+
+  return json({ ok: true, phase: PHASE, service: SERVICE_NAME });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -502,6 +614,7 @@ export default {
       if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve') return await handleResolve(url, env);
       if (request.method === 'GET' && url.pathname === '/api/shortlinks/resolve-direct') return await handleResolveDirect(url, env);
       if (request.method === 'POST' && url.pathname === '/api/shortlinks') return await handleCreate(request, env);
+      if (request.method === 'POST' && url.pathname === '/api/download-events') return await handleSmartDownloadEvent(request, env);
       if (request.method === 'GET' && url.pathname === '/api/admin/stats') return await handleAdminStats(env);
       if (request.method === 'GET' && url.pathname === '/api/admin/links') return await handleAdminLinks(url, env);
       if (request.method === 'GET' && url.pathname === '/api/admin/recent-clicks') return await handleRecentClicks(url, env);
@@ -512,7 +625,8 @@ export default {
         url.pathname === '/api/shortlinks/resolve-direct' ||
         url.pathname === '/api/admin/stats' ||
         url.pathname === '/api/admin/links' ||
-        url.pathname === '/api/admin/recent-clicks'
+        url.pathname === '/api/admin/recent-clicks' ||
+        url.pathname === '/api/download-events'
       ) {
         return json({ ok: false, error: 'Method not allowed' }, 405);
       }

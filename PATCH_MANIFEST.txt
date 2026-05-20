@@ -1,28 +1,29 @@
-PATCH: Phase 2
-BASELINE: gadstyle-shortlink-worker-phase5-repacked.zip
-APPLIED_DIRECTLY_ON_TOP_OF_PREVIOUS_STABLE: YES
+Stable full package: step05
+Project: gadstyle-shortlink-worker
+Package type: FULL REPLACEMENT ZIP
+Source baseline: gadstyle-shortlink-worker(3).zip
+Included patch chain: worker-patch-step01.zip, worker-patch-step02.zip, worker-patch-step03.zip, worker-patch-step04.zip, worker-patch-step05.zip
+Status: MARKED STABLE
 
-MODIFIED FILES:
-- package.json
+Exact files changed by included patches:
 - src/index.ts
 - PATCH_MANIFEST.txt
 
-ADDED FILES:
-- none
+Included changes:
+1. Companion manifests for app-only patch steps.
+2. Added lightweight smart-download reporting support in the Worker.
+3. Added smart_download_events D1 table creation/retention logic.
+4. Added POST /api/download-events endpoint for app root smart redirect logging.
+5. Extended GET /api/admin/stats to return smartDownloads data:
+   - totalRequests
+   - androidRedirects
+   - iosRedirects
+   - fallbackViews
+   - sources
+6. Added optional SMART_DOWNLOAD_LOG_SECRET validation when configured in Worker env.
 
-DELETED FILES:
-- none
-
-SUMMARY:
-- Added real aggregate click counting on shortlinks.
-- Added lightweight recent-click logging with capped retention.
-- Added real admin stats, paginated admin links, and recent-click feed endpoints.
-- Added automatic schema safety for click_count and recent_clicks table creation.
-- Public route contract remains unchanged and routing stays ID-based.
-
-
-Phase 2 root-fix2 packaging/build compatibility:
-- Removed package-lock.json to avoid Cloudflare npm clean-install bug/stall during dependency installation.
-- No runtime or routing logic changes.
-
-Additional fix: D1 schema creation now runs one statement at a time to avoid Cloudflare D1 multi-statement CREATE parsing errors.
+Safety notes:
+- Existing shortlink create/resolve/direct-resolve APIs remain unchanged.
+- Existing recent click retention remains unchanged.
+- No IP address or full user-agent is stored for smart-download reports.
+- Smart-download event retention is capped to keep D1 lightweight.
