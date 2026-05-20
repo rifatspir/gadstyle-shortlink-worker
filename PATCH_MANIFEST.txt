@@ -1,29 +1,18 @@
-Stable full package: step05
+Patch: step08
 Project: gadstyle-shortlink-worker
-Package type: FULL REPLACEMENT ZIP
-Source baseline: gadstyle-shortlink-worker(3).zip
-Included patch chain: worker-patch-step01.zip, worker-patch-step02.zip, worker-patch-step03.zip, worker-patch-step04.zip, worker-patch-step05.zip
-Status: MARKED STABLE
+Baseline: gadstyle-shortlink-worker-step07-stable-full.zip
+Type: patch-only
 
-Exact files changed by included patches:
+Changed files:
 - src/index.ts
+  - Cached schema initialization per Worker isolate to avoid running CREATE TABLE/INDEX checks on every request.
+  - Made smart-download event logging lighter by inserting first and pruning retained rows only every 100 inserts instead of every single event.
+  - Kept the same /api/download-events and /api/admin/stats API contract.
 - PATCH_MANIFEST.txt
+  - Updated for step08.
 
-Included changes:
-1. Companion manifests for app-only patch steps.
-2. Added lightweight smart-download reporting support in the Worker.
-3. Added smart_download_events D1 table creation/retention logic.
-4. Added POST /api/download-events endpoint for app root smart redirect logging.
-5. Extended GET /api/admin/stats to return smartDownloads data:
-   - totalRequests
-   - androidRedirects
-   - iosRedirects
-   - fallbackViews
-   - sources
-6. Added optional SMART_DOWNLOAD_LOG_SECRET validation when configured in Worker env.
-
-Safety notes:
-- Existing shortlink create/resolve/direct-resolve APIs remain unchanged.
-- Existing recent click retention remains unchanged.
-- No IP address or full user-agent is stored for smart-download reports.
-- Smart-download event retention is capped to keep D1 lightweight.
+Unchanged behavior / safety:
+- No shortlink route contract changes.
+- No D1 table name changes.
+- No admin stats response shape changes.
+- No IP address or full user-agent storage added.

@@ -179,7 +179,20 @@ function toAdminRecentClick(row: RecentClickRow) {
   };
 }
 
+let phase5SchemaReady: Promise<void> | null = null;
+
 async function ensurePhase5Schema(env: Env) {
+  if (!phase5SchemaReady) {
+    phase5SchemaReady = ensurePhase5SchemaInternal(env).catch((error) => {
+      phase5SchemaReady = null;
+      throw error;
+    });
+  }
+
+  return phase5SchemaReady;
+}
+
+async function ensurePhase5SchemaInternal(env: Env) {
   const statements = [
     `CREATE TABLE IF NOT EXISTS shortlinks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -588,18 +601,20 @@ async function handleSmartDownloadEvent(request: Request, env: Env) {
   const deviceType = normalizeSmartDownloadDevice(body.device_type);
   const source = normalizeSmartDownloadSource(body.source);
 
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO smart_download_events (destination, device_type, source)
-       VALUES (?, ?, ?)`,
-    ).bind(destination, deviceType, source),
-    env.DB.prepare(
+  const inserted = await env.DB.prepare(
+    `INSERT INTO smart_download_events (destination, device_type, source)
+     VALUES (?, ?, ?)`,
+  ).bind(destination, deviceType, source).run();
+
+  const lastRowId = Number(inserted.meta.last_row_id || 0);
+  if (lastRowId > 0 && lastRowId % 100 === 0) {
+    await env.DB.prepare(
       `DELETE FROM smart_download_events
        WHERE id NOT IN (
          SELECT id FROM smart_download_events ORDER BY id DESC LIMIT ?
        )`,
-    ).bind(MAX_SMART_DOWNLOAD_EVENT_ROWS),
-  ]);
+    ).bind(MAX_SMART_DOWNLOAD_EVENT_ROWS).run();
+  }
 
   return json({ ok: true, phase: PHASE, service: SERVICE_NAME });
 }
